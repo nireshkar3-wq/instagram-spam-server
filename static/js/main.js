@@ -188,212 +188,210 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-}
-
     // --- Monitoring Logic ---
     let screenshotInterval = null;
 
-function showScreenshotModal() {
-    if (!currentProfile) return;
-    modalProfileName.textContent = currentProfile;
-    screenshotModal.classList.remove('hidden');
-    startScreenshotPolling();
-}
-
-function hideScreenshotModal() {
-    screenshotModal.classList.add('hidden');
-    stopScreenshotPolling();
-}
-
-function startScreenshotPolling() {
-    stopScreenshotPolling();
-    updateScreenshot();
-    screenshotInterval = setInterval(updateScreenshot, 3000);
-}
-
-function stopScreenshotPolling() {
-    if (screenshotInterval) {
-        clearInterval(screenshotInterval);
-        screenshotInterval = null;
+    function showScreenshotModal() {
+        if (!currentProfile) return;
+        modalProfileName.textContent = currentProfile;
+        screenshotModal.classList.remove('hidden');
+        startScreenshotPolling();
     }
-}
 
-async function updateScreenshot() {
-    if (!currentProfile || screenshotModal.classList.contains('hidden')) return;
-
-    screenshotLoader.classList.remove('hidden');
-    try {
-        // Add cache buster
-        const imgUrl = `/screenshot/${currentProfile}?t=${Date.now()}`;
-
-        // Preload image to avoid flickering
-        const tempImg = new Image();
-        tempImg.onload = () => {
-            botScreenshot.src = imgUrl;
-            screenshotLoader.classList.add('hidden');
-        };
-        tempImg.onerror = () => {
-            screenshotLoader.classList.add('hidden');
-        };
-        tempImg.src = imgUrl;
-
-    } catch (err) {
-        console.error("Screenshot update error:", err);
-        screenshotLoader.classList.add('hidden');
+    function hideScreenshotModal() {
+        screenshotModal.classList.add('hidden');
+        stopScreenshotPolling();
     }
-}
 
-// --- Helper Functions ---
-function addLogEntry(message, level, timestamp) {
-    const entry = document.createElement('div');
-    entry.className = `log-entry ${level}`;
+    function startScreenshotPolling() {
+        stopScreenshotPolling();
+        updateScreenshot();
+        screenshotInterval = setInterval(updateScreenshot, 3000);
+    }
 
-    entry.innerHTML = `
+    function stopScreenshotPolling() {
+        if (screenshotInterval) {
+            clearInterval(screenshotInterval);
+            screenshotInterval = null;
+        }
+    }
+
+    async function updateScreenshot() {
+        if (!currentProfile || screenshotModal.classList.contains('hidden')) return;
+
+        screenshotLoader.classList.remove('hidden');
+        try {
+            // Add cache buster
+            const imgUrl = `/screenshot/${currentProfile}?t=${Date.now()}`;
+
+            // Preload image to avoid flickering
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                botScreenshot.src = imgUrl;
+                screenshotLoader.classList.add('hidden');
+            };
+            tempImg.onerror = () => {
+                screenshotLoader.classList.add('hidden');
+            };
+            tempImg.src = imgUrl;
+
+        } catch (err) {
+            console.error("Screenshot update error:", err);
+            screenshotLoader.classList.add('hidden');
+        }
+    }
+
+    // --- Helper Functions ---
+    function addLogEntry(message, level, timestamp) {
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${level}`;
+
+        entry.innerHTML = `
             <span class="timestamp">[${timestamp}]</span>
             <span class="message">${message}</span>
         `;
 
-    logConsole.appendChild(entry);
-    logConsole.scrollTop = logConsole.scrollHeight;
-}
+        logConsole.appendChild(entry);
+        logConsole.scrollTop = logConsole.scrollHeight;
+    }
 
-async function checkStatus() {
-    if (!currentProfile) return;
-    try {
-        const resp = await fetch(`/status/${currentProfile}`);
-        const status = await resp.json();
+    async function checkStatus() {
+        if (!currentProfile) return;
+        try {
+            const resp = await fetch(`/status/${currentProfile}`);
+            const status = await resp.json();
 
-        if (status.running && !isRunning) {
-            setBotRunning(true);
-            addLogEntry(`Bot is active: ${status.current_task}`, "system", new Date().toLocaleTimeString());
-        } else if (!status.running && isRunning) {
-            setBotRunning(false);
-            addLogEntry("Detected bot idle. UI reset.", "system", new Date().toLocaleTimeString());
+            if (status.running && !isRunning) {
+                setBotRunning(true);
+                addLogEntry(`Bot is active: ${status.current_task}`, "system", new Date().toLocaleTimeString());
+            } else if (!status.running && isRunning) {
+                setBotRunning(false);
+                addLogEntry("Detected bot idle. UI reset.", "system", new Date().toLocaleTimeString());
+            }
+        } catch (err) {
+            console.error("Failed to check status", err);
         }
-    } catch (err) {
-        console.error("Failed to check status", err);
-    }
-}
-
-function setBotRunning(running) {
-    isRunning = running;
-    startBtn.disabled = running;
-    const loader = startBtn.querySelector('.btn-loader');
-    const btnText = startBtn.querySelector('span');
-
-    if (running) {
-        statusBadge.classList.add('running');
-        statusText.textContent = "Running";
-        loader.classList.remove('hidden');
-        btnText.textContent = "Automation Active...";
-        monitorBotBtn.classList.remove('hidden');
-    } else {
-        statusBadge.classList.remove('running');
-        statusText.textContent = "Ready";
-        loader.classList.add('hidden');
-        btnText.textContent = "Initiate Task";
-        monitorBotBtn.classList.add('hidden');
-        hideScreenshotModal();
-    }
-}
-
-// --- Event Handlers ---
-toggleAddBtn.addEventListener('click', () => {
-    addProfileForm.classList.toggle('hidden');
-});
-
-saveProfileBtn.addEventListener('click', saveProfile);
-deleteProfileBtn.addEventListener('click', deleteProfile);
-setupLoginBtn.addEventListener('click', setupLogin);
-exportSessionBtn.addEventListener('click', exportSession);
-importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
-monitorBotBtn.addEventListener('click', showScreenshotModal);
-closeModalBtn.addEventListener('click', hideScreenshotModal);
-
-// Close modal on click outside
-screenshotModal.addEventListener('click', (e) => {
-    if (e.target === screenshotModal) hideScreenshotModal();
-});
-
-sessionUploadInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        importSession(e.target.files[0]);
-        // Reset input so the same file can be uploaded again if needed
-        e.target.value = '';
-    }
-});
-
-profileSelect.addEventListener('change', () => {
-    const newProfile = profileSelect.value;
-    if (currentProfile) {
-        socket.emit('leave', { profile: currentProfile });
     }
 
-    currentProfile = newProfile;
+    function setBotRunning(running) {
+        isRunning = running;
+        startBtn.disabled = running;
+        const loader = startBtn.querySelector('.btn-loader');
+        const btnText = startBtn.querySelector('span');
 
-    if (currentProfile) {
-        socket.emit('join', { profile: currentProfile });
-        // Clear console when switching accounts to avoid confusion
+        if (running) {
+            statusBadge.classList.add('running');
+            statusText.textContent = "Running";
+            loader.classList.remove('hidden');
+            btnText.textContent = "Automation Active...";
+            monitorBotBtn.classList.remove('hidden');
+        } else {
+            statusBadge.classList.remove('running');
+            statusText.textContent = "Ready";
+            loader.classList.add('hidden');
+            btnText.textContent = "Initiate Task";
+            monitorBotBtn.classList.add('hidden');
+            hideScreenshotModal();
+        }
+    }
+
+    // --- Event Handlers ---
+    toggleAddBtn.addEventListener('click', () => {
+        addProfileForm.classList.toggle('hidden');
+    });
+
+    saveProfileBtn.addEventListener('click', saveProfile);
+    deleteProfileBtn.addEventListener('click', deleteProfile);
+    setupLoginBtn.addEventListener('click', setupLogin);
+    exportSessionBtn.addEventListener('click', exportSession);
+    importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
+    monitorBotBtn.addEventListener('click', showScreenshotModal);
+    closeModalBtn.addEventListener('click', hideScreenshotModal);
+
+    // Close modal on click outside
+    screenshotModal.addEventListener('click', (e) => {
+        if (e.target === screenshotModal) hideScreenshotModal();
+    });
+
+    sessionUploadInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            importSession(e.target.files[0]);
+            // Reset input so the same file can be uploaded again if needed
+            e.target.value = '';
+        }
+    });
+
+    profileSelect.addEventListener('change', () => {
+        const newProfile = profileSelect.value;
+        if (currentProfile) {
+            socket.emit('leave', { profile: currentProfile });
+        }
+
+        currentProfile = newProfile;
+
+        if (currentProfile) {
+            socket.emit('join', { profile: currentProfile });
+            // Clear console when switching accounts to avoid confusion
+            logConsole.innerHTML = '';
+            addLogEntry(`Switched to account: ${currentProfile}`, "system", new Date().toLocaleTimeString());
+            // Immediately check status for the new profile
+            checkStatus();
+        }
+    });
+
+    botForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const post_url = document.getElementById('post_url').value;
+        const comment = document.getElementById('comment').value;
+        const count = document.getElementById('count').value;
+        const headless = document.getElementById('headless').checked;
+        const profile_name = profileSelect.value;
+
+        if (!profile_name) {
+            alert("Please select an account profile first.");
+            return;
+        }
+
+        if (!post_url || !comment) return;
+
+        setBotRunning(true);
+        addLogEntry(`Starting bot for: ${post_url} [Profile: ${profile_name}]`, "system", new Date().toLocaleTimeString());
+
+        try {
+            const response = await fetch('/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ post_url, comment, count, headless, profile_name })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                addLogEntry(`Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
+                setBotRunning(false);
+            }
+        } catch (err) {
+            addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
+            setBotRunning(false);
+        }
+    });
+
+    clearLogsBtn.addEventListener('click', () => {
         logConsole.innerHTML = '';
-        addLogEntry(`Switched to account: ${currentProfile}`, "system", new Date().toLocaleTimeString());
-        // Immediately check status for the new profile
-        checkStatus();
-    }
-});
+        addLogEntry("Logs cleared.", "system", new Date().toLocaleTimeString());
+    });
+    // --- Password Toggle ---
+    const togglePasswordBtn = document.getElementById('toggle-password-btn');
+    const newPasswordField = document.getElementById('new_password');
+    const eyeIcon = togglePasswordBtn.querySelector('.eye-icon');
+    const eyeOffIcon = togglePasswordBtn.querySelector('.eye-off-icon');
 
-botForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+    togglePasswordBtn.addEventListener('click', () => {
+        const isPassword = newPasswordField.type === 'password';
+        newPasswordField.type = isPassword ? 'text' : 'password';
 
-    const post_url = document.getElementById('post_url').value;
-    const comment = document.getElementById('comment').value;
-    const count = document.getElementById('count').value;
-    const headless = document.getElementById('headless').checked;
-    const profile_name = profileSelect.value;
-
-    if (!profile_name) {
-        alert("Please select an account profile first.");
-        return;
-    }
-
-    if (!post_url || !comment) return;
-
-    setBotRunning(true);
-    addLogEntry(`Starting bot for: ${post_url} [Profile: ${profile_name}]`, "system", new Date().toLocaleTimeString());
-
-    try {
-        const response = await fetch('/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ post_url, comment, count, headless, profile_name })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            addLogEntry(`Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
-            setBotRunning(false);
-        }
-    } catch (err) {
-        addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
-        setBotRunning(false);
-    }
-});
-
-clearLogsBtn.addEventListener('click', () => {
-    logConsole.innerHTML = '';
-    addLogEntry("Logs cleared.", "system", new Date().toLocaleTimeString());
-});
-// --- Password Toggle ---
-const togglePasswordBtn = document.getElementById('toggle-password-btn');
-const newPasswordField = document.getElementById('new_password');
-const eyeIcon = togglePasswordBtn.querySelector('.eye-icon');
-const eyeOffIcon = togglePasswordBtn.querySelector('.eye-off-icon');
-
-togglePasswordBtn.addEventListener('click', () => {
-    const isPassword = newPasswordField.type === 'password';
-    newPasswordField.type = isPassword ? 'text' : 'password';
-
-    eyeIcon.classList.toggle('hidden', isPassword);
-    eyeOffIcon.classList.toggle('hidden', !isPassword);
-});
+        eyeIcon.classList.toggle('hidden', isPassword);
+        eyeOffIcon.classList.toggle('hidden', !isPassword);
+    });
 });

@@ -341,7 +341,9 @@ textarea {
     display: block;
 }
 
-.toggle-password
+.toggle-password .hidden {
+    display: none;
+}
 
 /* Monitor Bot Button */
 .pulse-btn {
