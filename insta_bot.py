@@ -196,18 +196,28 @@ class InstagramCommentBot:
                     pass
 
                 # Find username field using multiple possible selectors
-                user_selectors = ["username", "//*[@name='username']", "//*[@aria-label='Phone number, username, or email']"]
+                user_selectors = [
+                    "username", 
+                    "//*[@name='username']", 
+                    "//input[@aria-label='Phone number, username, or email']",
+                    "//input[@type='text']",
+                    "//input[contains(@class, '_2hvTZ')]"
+                ]
                 user_field = None
                 for selector in user_selectors:
                     try:
                         by = By.NAME if selector == "username" else By.XPATH
-                        user_field = WebDriverWait(self.browser, 5).until(
+                        user_field = WebDriverWait(self.browser, 3).until(
                             EC.presence_of_element_located((by, selector))
                         )
                         if user_field: break
                     except: continue
 
                 if not user_field:
+                    # Debug help: save a screenshot on failure to see what's actually on screen
+                    if self.headless:
+                        self.browser.save_screenshot(f"login_failure_{self.profile_name}.png")
+                        self.log(f"📸 Saved failure screenshot to login_failure_{self.profile_name}.png", logging.WARNING)
                     raise Exception("Could not find username field with any known selectors")
 
                 # Find password field
