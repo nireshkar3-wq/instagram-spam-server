@@ -354,13 +354,24 @@ textarea {
 /* Monitor Bot Button */
 .pulse-btn {
     animation: glow-pulse 2s infinite;
-    background: rgba(121, 40, 202, 0.1);
+    background: rgba(121, 40, 202, 0.15);
     border-color: var(--accent-alt);
     color: var(--accent-alt);
     font-weight: 600;
-    padding: 0.625rem 1.25rem;
-    width: auto;
-    gap: 0.5rem;
+    padding: 0.625rem 1.5rem;
+    width: auto !important;
+    height: auto !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    border-radius: 100px;
+    /* Match status badge */
+}
+
+.pulse-btn svg {
+    display: block !important;
+    color: var(--accent-alt);
 }
 
 @keyframes glow-pulse {
