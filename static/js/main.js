@@ -285,6 +285,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loader.classList.remove('hidden');
             btnText.textContent = "Automation Active...";
             monitorBotBtn.classList.remove('hidden');
+            console.log("Monitor button shown for profile:", currentProfile);
+            addLogEntry("📺 Live View enabled. Click the eye icon in the header to monitor progress.", "system", new Date().toLocaleTimeString());
         } else {
             statusBadge.classList.remove('running');
             statusText.textContent = "Ready";
