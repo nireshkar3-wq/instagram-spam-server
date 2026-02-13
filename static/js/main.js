@@ -15,11 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const addProfileForm = document.getElementById('add-profile-form');
     const saveProfileBtn = document.getElementById('save-profile-btn');
     const deleteProfileBtn = document.getElementById('delete-profile-btn');
+    const setupLoginBtn = document.getElementById('setup-login-btn');
 
     let isRunning = false;
+    let currentProfile = "";
 
     // --- Init ---
     fetchProfiles();
+    checkStatus();
+
+    // Set interval to periodically check status in case socket is missed
+    setInterval(() => {
+        if (currentProfile) checkStatus();
+    }, 5000);
 
     // --- Socket Listeners ---
     socket.on('bot_log', (data) => {
@@ -27,8 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('bot_finished', (data) => {
-        setBotRunning(false);
-        addLogEntry("Process finished.", "system", new Date().toLocaleTimeString());
+        if (data.profile === currentProfile) {
+            setBotRunning(false);
+            addLogEntry("Process finished.", "system", new Date().toLocaleTimeString());
+        }
     });
 
     // --- Profile Helpers ---
@@ -37,8 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch('/profiles');
             const profiles = await resp.json();
 
-            // Clear existing except default
-            profileSelect.innerHTML = '<option value="default">Default (No saved credentials)</option>';
+            // Clear existing except placeholder
+            profileSelect.innerHTML = '<option value="">-- Please select an account --</option>';
 
             Object.keys(profiles).forEach(name => {
                 const opt = document.createElement('option');
@@ -82,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function deleteProfile() {
         const name = profileSelect.value;
-        if (name === 'default') return;
+        if (!name) return;
 
         if (!confirm(`Are you sure you want to delete profile "${name}"?`)) return;
 
@@ -91,6 +101,41 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchProfiles();
         } catch (err) {
             alert("Error deleting profile: " + err.message);
+        }
+    }
+
+    async function setupLogin() {
+        const profile_name = profileSelect.value;
+        if (!profile_name) {
+            alert("Please select an account profile to setup.");
+            return;
+        }
+        if (profile_name === 'default') {
+            alert("Please select a saved account to setup login.");
+            return;
+        }
+
+        if (isRunning) return;
+
+        setBotRunning(true);
+        addLogEntry(`Starting manual login setup for: ${profile_name}`, "system", new Date().toLocaleTimeString());
+        addLogEntry("A visible browser window will open. Please log in manually if needed.", "INFO", new Date().toLocaleTimeString());
+
+        try {
+            const resp = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile_name })
+            });
+
+            const result = await resp.json();
+            if (!resp.ok) {
+                addLogEntry(`Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
+                setBotRunning(false);
+            }
+        } catch (err) {
+            addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
+            setBotRunning(false);
         }
     }
 
@@ -108,9 +153,28 @@ document.addEventListener('DOMContentLoaded', () => {
         logConsole.scrollTop = logConsole.scrollHeight;
     }
 
+    async function checkStatus() {
+        if (!currentProfile) return;
+        try {
+            const resp = await fetch(`/status/${currentProfile}`);
+            const status = await resp.json();
+
+            if (status.running && !isRunning) {
+                setBotRunning(true);
+                addLogEntry(`Bot is active: ${status.current_task}`, "system", new Date().toLocaleTimeString());
+            } else if (!status.running && isRunning) {
+                setBotRunning(false);
+                addLogEntry("Detected bot idle. UI reset.", "system", new Date().toLocaleTimeString());
+            }
+        } catch (err) {
+            console.error("Failed to check status", err);
+        }
+    }
+
     function setBotRunning(running) {
         isRunning = running;
         startBtn.disabled = running;
+        setupLoginBtn.disabled = running;
 
         if (running) {
             btnText.textContent = "Automation Active...";
@@ -132,6 +196,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveProfileBtn.addEventListener('click', saveProfile);
     deleteProfileBtn.addEventListener('click', deleteProfile);
+    setupLoginBtn.addEventListener('click', setupLogin);
+
+    profileSelect.addEventListener('change', () => {
+        const newProfile = profileSelect.value;
+        if (currentProfile) {
+            socket.emit('leave', { profile: currentProfile });
+        }
+
+        currentProfile = newProfile;
+
+        if (currentProfile) {
+            socket.emit('join', { profile: currentProfile });
+            // Clear console when switching accounts to avoid confusion
+            logConsole.innerHTML = '';
+            addLogEntry(`Switched to account: ${currentProfile}`, "system", new Date().toLocaleTimeString());
+            // Immediately check status for the new profile
+            checkStatus();
+        }
+    });
 
     botForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -141,6 +224,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const count = document.getElementById('count').value;
         const headless = document.getElementById('headless').checked;
         const profile_name = profileSelect.value;
+
+        if (!profile_name) {
+            alert("Please select an account profile first.");
+            return;
+        }
 
         if (!post_url || !comment) return;
 

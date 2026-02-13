@@ -481,6 +481,12 @@ select option {
     border-color: var(--accent);
 }
 
+.icon-btn.secondary:hover {
+    background: var(--accent-alt);
+    border-color: var(--accent-alt);
+    box-shadow: 0 0 20px rgba(121, 40, 202, 0.3);
+}
+
 .icon-btn.danger:hover {
     background: var(--error);
     border-color: var(--error);

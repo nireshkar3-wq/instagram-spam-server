@@ -13,10 +13,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import logging
 
 
-# Remove: from credentials import USERNAME, PASSWORD
-
 __author__ = 'Modified for Direct Post Commenting'
-__version__ = '2.0.0'
+__version__ = '2.1.0'
 __status__ = 'Dev'
 
 # Setup logging
@@ -70,46 +68,77 @@ class InstagramCommentBot:
         if self.headless:
             options.add_argument('--headless')
             options.add_argument('--disable-gpu')
-            # Important for headless reliability
             options.add_argument('--window-size=1920,1080')
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Linux container compatibility
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
         
-        # Initialize chrome driver using Selenium Manager (built-in to Selenium 4.6+)
-        # This will automatically handle downloading and setting up the correct driver
+        # Anti-detection measures
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        # Initialize chrome driver using Selenium Manager
+        self.log("🤖 Preparing the bot engine (this may take a moment)...")
         self.browser = webdriver.Chrome(service=Service(), options=options)
-        self.wait = WebDriverWait(self.browser, 10)
         
-        self.log(f"Browser initialized for profile '{self.profile_name}' at: {profile_path}")
+        # Hide navigator.webdriver flag
+        self.browser.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                })
+            """
+        })
+        
+        self.wait = WebDriverWait(self.browser, 10)
+        self.log("✅ Engine ready and secured.")
+        
+        self.log(f"📂 Loading session for profile: {self.profile_name}")
         
     def type_slowly(self, element, text):
-        """Type text slowly like a human."""
+        """Type text slowly like a human, with support for emojis and React state sync."""
+        element.click()
         element.clear()
         for char in text:
-            element.send_keys(char)
-            sleep(0.1) # 100ms delay between keys
+            if ord(char) > 0xFFFF:
+                self.browser.execute_script("arguments[0].value += arguments[1];", element, char)
+            else:
+                element.send_keys(char)
+            sleep(0.1)
+        
+        # Trigger events to ensure React picks up the changes
+        self.browser.execute_script("""
+            var el = arguments[0];
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+        """, element)
         
     def is_logged_in(self):
         """Check if user is already logged in to Instagram."""
         try:
             current_url = self.browser.current_url
-            self.log(f"Current URL: {current_url}")
+            self.log("🌐 Checking Instagram session status...")
             
             # Wait a bit for page to load
             sleep(3)
             
             # Look for multiple indicators of being logged in
-            # We check for common icons (Home, Messenger, New Post) or the search bar
+            self.log("🔍 Searching for active login session...")
             indicators = [
-                "//svg[@aria-label='Home' or @aria-label='New post' or @aria-label='Direct message' or @aria-label='Explore' or @aria-label='Reels' or @aria-label='Messenger']",
-                "//input[@placeholder='Search']",
-                "//div[@role='navigation']",
-                "//img[contains(@alt, \"profile picture\")]"
+                ("//svg[@aria-label='Home' or @aria-label='New post' or @aria-label='Direct message' or @aria-label='Explore' or @aria-label='Reels' or @aria-label='Messenger']", "Navigation Icons"),
+                ("//input[@placeholder='Search']", "Search Bar"),
+                ("//div[@role='navigation']", "Navigation Sidebar"),
+                ("//img[contains(@alt, \"profile picture\")]", "Profile Picture")
             ]
             
-            for xpath in indicators:
+            for xpath, name in indicators:
                 try:
                     self.browser.find_element(By.XPATH, xpath)
-                    self.log(f"Detected logged-in state (found: {xpath})")
+                    self.log(f"✅ Session verified: Found {name}")
                     return True
                 except NoSuchElementException:
                     continue
@@ -131,20 +160,24 @@ class InstagramCommentBot:
             self.log("Login status unclear (no navigation icons found yet)")
             return None # Return None for 'unclear'
             
-        except Exception as e:
+        except (NoSuchElementException, Exception) as e:
+            msg = str(e).lower()
+            if "invalid session id" in msg or "no such window" in msg:
+                self.log("Browser session lost or closed.", logging.WARNING)
+                return "SESSION_LOST"
             self.log(f"Error checking login status: {e}", logging.ERROR)
             return False
     
     def login(self):
         """Login to Instagram - Automated with manual fallback."""
         try:
-            self.log("Opening Instagram for login...")
+            self.log("🏠 Opening Instagram homepage...")
             self.browser.get('https://www.instagram.com/accounts/login/')
             sleep(5)
             
             # Check if already logged in (maybe session was active)
             if self.is_logged_in() == True:
-                self.log("Session active: Already logged in!")
+                self.log("✨ Session verified! Already logged in.")
                 return True
             
             # 1. Try Automated Login
@@ -180,12 +213,15 @@ class InstagramCommentBot:
                 pass_field = self.browser.find_element(By.NAME, "password")
                 
                 # Human-like typing
+                self.log(f"Entering username: {self.username}")
                 self.type_slowly(user_field, self.username)
                 sleep(1)
+                self.log("Entering password...")
                 self.type_slowly(pass_field, self.password)
                 sleep(1)
                 
                 # Submit
+                self.log("Looking for 'Log in' button...")
                 submit_selectors = ["//button[@type='submit']", "//div[text()='Log in']", "//button[contains(., 'Log In')]"]
                 for selector in submit_selectors:
                     try:
@@ -196,7 +232,7 @@ class InstagramCommentBot:
                         if selector == submit_selectors[-1]: # If last one failing, try Enter key
                             pass_field.send_keys(Keys.ENTER)
                 
-                self.log("Login form submitted. Waiting for load...")
+                self.log("🔓 Login form submitted. Waiting to see if we're in...")
                 sleep(12) # Increased wait for potential redirects/popups
                 
                 # Check for "Save Login Info"
@@ -205,7 +241,7 @@ class InstagramCommentBot:
                         EC.element_to_be_clickable((By.XPATH, "//button[text()='Save info' or text()='Save Info']"))
                     )
                     save_info_btn.click()
-                    self.log("Handled 'Save Login Info' prompt")
+                    self.log("💾 Saved login info for future use.")
                     sleep(3)
                 except:
                     pass
@@ -216,14 +252,14 @@ class InstagramCommentBot:
                         EC.element_to_be_clickable((By.XPATH, "//button[text()='Not Now' or text()='Not now']"))
                     )
                     not_now_btn.click()
-                    self.log("Handled 'Turn on Notifications' prompt")
+                    self.log("🔕 Dismissed notification prompt.")
                     sleep(3)
                 except:
                     pass
                 
                 # Verify if login worked
                 if self.is_logged_in() == True:
-                    self.log("Automated login successful!")
+                    self.log("🎊 Automated login successful!")
                     return True
                 else:
                     self.log("Automated login verification failed.", logging.WARNING)
@@ -242,11 +278,15 @@ class InstagramCommentBot:
             if self.log_callback:
                 self.log("Waiting for manual login to complete (monitoring browser)...")
                 # Loop and wait for login detection
-                max_retries = 60 # 2 minutes
+                max_retries = 90 # 3 minutes for manual action
                 for _ in range(max_retries):
-                    if self.is_logged_in() == True:
+                    status = self.is_logged_in()
+                    if status == True:
                         self.log("Manual login detected! Proceeding...")
                         return True
+                    elif status == "SESSION_LOST":
+                        self.log("Login aborted: Browser window closed.", logging.ERROR)
+                        return False
                     sleep(2)
                 self.log("Manual login timeout reached.", logging.ERROR)
                 return False
@@ -268,10 +308,27 @@ class InstagramCommentBot:
             self.log(f"Execution error during login: {e}", logging.ERROR)
             return False
 
+    def login_standalone(self):
+        """Standalone login mode to just setup the session."""
+        try:
+            self.setup_browser()
+            success = self.login()
+            if success:
+                self.log("✅ Session setup complete! You can now run the bot in headless mode.")
+            return success
+        except Exception as e:
+            self.log(f"Standalone login error: {e}", logging.ERROR)
+            return False
+        finally:
+            self.log("Closing browser in 5 seconds...")
+            sleep(5)
+            if self.browser:
+                self.browser.quit()
+
     def navigate_to_post(self, post_url):
         """Navigate to a specific Instagram post."""
         try:
-            self.log(f"Navigating to post: {post_url}")
+            self.log(f"📍 Navigating to post: {post_url}")
             self.browser.get(post_url)
             sleep(5)
             
@@ -280,7 +337,7 @@ class InstagramCommentBot:
                 # Look for the close button on the login modal or the login button in the modal
                 login_modal_close = self.browser.find_element(By.XPATH, "//div[@role='dialog']//svg[@aria-label='Close']")
                 login_modal_close.click()
-                self.log("Closed login modal on post page")
+                self.log("🛡️ Closed annoying login modal.")
                 sleep(1)
             except NoSuchElementException:
                 pass
@@ -289,16 +346,19 @@ class InstagramCommentBot:
             try:
                 # Instagram sometimes hides the comment box behind a "Log In" button
                 self.browser.find_element(By.XPATH, "//textarea[@placeholder='Add a comment…' or @placeholder='Add a comment...' or contains(@aria-label, 'Add a comment')]")
-                self.log("Successfully navigated to post and found comment section")
+                self.log("🗨️ Found the comment section.")
                 return True
             except NoSuchElementException:
                 # Check if there's a "Log In" button where the comment box should be
                 try:
                     self.browser.find_element(By.XPATH, "//a[text()='Log in' or text()='Log In']")
-                    self.log("Post page loaded but still asking for login. Redirecting to homepage for login...", logging.WARNING)
+                    self.log("⚠️ Post page is asking for login again. Retrying...", logging.WARNING)
                     return False
                 except NoSuchElementException:
-                    self.log("Post page loaded but comment section not found", logging.WARNING)
+                    self.log("🕵️ Comment section hidden? Attempting to find it anyway...", logging.WARNING)
+                    # Check if it's a Reel
+                    if "/reels/" in self.browser.current_url:
+                        self.log("Detected Reel layout, attempting to reveal comment section if hidden...")
                     # Try scrolling down to trigger loading
                     self.browser.execute_script("window.scrollTo(0, 500);")
                     sleep(2)
@@ -317,9 +377,24 @@ class InstagramCommentBot:
                 
                 # Find the comment textarea - try multiple selectors
                 try:
-                    comment_box = self.wait.until(
-                        EC.presence_of_element_located((By.XPATH, "//textarea[@placeholder='Add a comment…' or @placeholder='Add a comment...' or contains(@aria-label, 'Add a comment')]"))
-                    )
+                    # Generic selector that often works for both posts and reels
+                    selectors = [
+                        "//textarea[@placeholder='Add a comment…' or @placeholder='Add a comment...' or contains(@aria-label, 'Add a comment')]",
+                        "//textarea[contains(@class, 'x78zum5')]", # Common reel class
+                        "//div[@role='textbox']"
+                    ]
+                    comment_box = None
+                    for selector in selectors:
+                        try:
+                            comment_box = WebDriverWait(self.browser, 5).until(
+                                EC.presence_of_element_located((By.XPATH, selector))
+                            )
+                            if comment_box: break
+                        except: continue
+                    
+                    if not comment_box:
+                        raise TimeoutException("No comment box found with default selectors")
+                        
                 except TimeoutException:
                     self.log("Standard comment box not found, trying fallback...", logging.WARNING)
                     # Fallback: try finding any textarea
@@ -331,8 +406,9 @@ class InstagramCommentBot:
                 # Re-find to avoid stale element
                 comment_box = self.browser.find_element(By.XPATH, "//textarea[contains(@aria-label, 'Add a comment')]")
                 # Type the comment human-like
+                self.log(f"✍️ Typing comment (length: {len(comment_text)} chars)...")
                 self.type_slowly(comment_box, comment_text)
-                self.log(f"Comment {i+1} entered: {comment_text}")
+                self.log("🆗 Comment entered. Clicking Post.")
                 sleep(2)
                 
                 # Find and click the Post button - try multiple common XPaths
@@ -353,7 +429,6 @@ class InstagramCommentBot:
                         button.click()
                         self.log(f"Comment {i+1} posted via button")
                         post_clicked = True
-                        comments_posted += 1
                         break
                     except:
                         continue
@@ -361,14 +436,45 @@ class InstagramCommentBot:
                 if not post_clicked:
                     self.log("Could not find Post button, trying Enter key fallback...", logging.WARNING)
                     comment_box.send_keys(Keys.ENTER)
-                    self.log(f"Comment {i+1} submitted via Enter key")
+                    post_clicked = True # Consider it clicked for verification
+                
+                # --- Post Verification ---
+                self.log("🧐 Verifying that the comment appeared...")
+                verification_success = False
+                for _ in range(5): # Wait up to 10 seconds for verification
+                    sleep(2)
+                    # 1. Check if comment box is cleared (often happens on success)
+                    try:
+                        current_val = self.browser.execute_script("return arguments[0].value;", comment_box)
+                        if not current_val:
+                            self.log("✨ Success: Comment box is clear.")
+                            verification_success = True
+                            break
+                    except: pass
+                    
+                    # 2. Look for the comment text on the page
+                    try:
+                        # Find the most recent comment with our text
+                        self.browser.find_element(By.XPATH, f"//*[text()='{comment_text}']")
+                        self.log("✨ Success: Found your comment in the feed!")
+                        verification_success = True
+                        break
+                    except: pass
+                
+                if verification_success:
+                    self.log(f"✅ Comment {i+1} verified.")
+                    comments_posted += 1
+                else:
+                    self.log(f"⚠️ Could not verify comment {i+1} presence. It might be delayed.", logging.WARNING)
+                    # We still increment if post_clicked was true, but we log the warning
                     comments_posted += 1
                 
                 # Wait between comments to avoid rate limiting
                 if i < count - 1:
                     wait_time = 10 + (i * 3) # More generous wait time for reliability
-                    self.log(f"Waiting {wait_time} seconds before next comment...")
-                    sleep(wait_time)
+                    for remaining in range(wait_time, 0, -5):
+                        self.log(f"Cooling down... {remaining} seconds remaining before next comment.")
+                        sleep(5 if remaining >= 5 else remaining)
                 
             except Exception as e:
                 self.log(f"Error posting comment {i+1}: {e}", logging.ERROR)

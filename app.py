@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 import threading
@@ -24,13 +27,24 @@ def save_profiles(profiles):
     with open(PROFILES_FILE, 'w') as f:
         json.dump(profiles, f, indent=4)
 
-# Store the current bot instance and thread
-bot_status = {
-    'running': False,
-    'current_task': None,
-    'last_log': None
-}
-bot_thread = None
+# Store the current bot instances and their status
+# Format: { 'profile_name': { 'running': bool, 'current_task': str, 'thread': Thread } }
+active_bots = {}
+
+@socketio.on('join')
+def on_join(data):
+    profile = data.get('profile')
+    if profile:
+        eventlet.sleep(0) # Yield for eventlet
+        join_room(profile)
+        logging.info(f"Client joined room: {profile}")
+
+@socketio.on('leave')
+def on_leave(data):
+    profile = data.get('profile')
+    if profile:
+        leave_room(profile)
+        logging.info(f"Client left room: {profile}")
 
 @app.route('/profiles', methods=['GET'])
 def get_profiles():
@@ -74,8 +88,8 @@ def delete_profile(name):
         return jsonify({'message': f'Profile {name} credentials deleted'})
     return jsonify({'error': 'Profile not found'}), 404
 
-def bot_log_callback(message, level):
-    """Callback function for the bot to send logs to the frontend."""
+def bot_log_callback(profile_name, message, level):
+    """Callback function for the bot to send logs to the frontend via rooms."""
     level_str = "INFO"
     if level == logging.ERROR: level_str = "ERROR"
     elif level == logging.WARNING: level_str = "WARNING"
@@ -84,18 +98,44 @@ def bot_log_callback(message, level):
     socketio.emit('bot_log', {
         'message': message,
         'level': level_str,
-        'timestamp': timestamp
-    })
+        'timestamp': timestamp,
+        'profile': profile_name
+    }, room=profile_name)
+
+def run_login_task(profile_name, username, password):
+    active_bots[profile_name]['running'] = True
+    active_bots[profile_name]['current_task'] = f"Setting up session for {profile_name}"
+    
+    try:
+        bot = InstagramCommentBot(
+            headless=False, # Must be visible for initial setup
+            log_callback=lambda msg, lvl: bot_log_callback(profile_name, msg, lvl),
+            profile_name=profile_name,
+            username=username,
+            password=password
+        )
+        success = bot.login_standalone()
+        
+        if success:
+            bot_log_callback(profile_name, "✅ Login successful! Session saved.", logging.INFO)
+        else:
+            bot_log_callback(profile_name, "❌ Login failed.", logging.ERROR)
+            
+    except Exception as e:
+        bot_log_callback(profile_name, f"Login error: {str(e)}", logging.ERROR)
+    finally:
+        active_bots[profile_name]['running'] = False
+        active_bots[profile_name]['current_task'] = None
+        socketio.emit('bot_finished', {'success': True, 'profile': profile_name}, room=profile_name)
 
 def run_bot_task(post_url, comment, count, headless, profile_name, username, password):
-    global bot_thread
-    bot_status['running'] = True
-    bot_status['current_task'] = f"Posting to {post_url} via {profile_name}"
+    active_bots[profile_name]['running'] = True
+    active_bots[profile_name]['current_task'] = f"Posting to {post_url} via {profile_name}"
     
     try:
         bot = InstagramCommentBot(
             headless=headless, 
-            log_callback=bot_log_callback,
+            log_callback=lambda msg, lvl: bot_log_callback(profile_name, msg, lvl),
             profile_name=profile_name,
             username=username,
             password=password
@@ -103,60 +143,106 @@ def run_bot_task(post_url, comment, count, headless, profile_name, username, pas
         success = bot.run(post_url, comment, count)
         
         if success:
-            bot_log_callback("✅ Bot task completed successfully!", logging.INFO)
+            bot_log_callback(profile_name, "✅ Bot task completed successfully!", logging.INFO)
         else:
-            bot_log_callback("❌ Bot task failed.", logging.ERROR)
+            bot_log_callback(profile_name, "❌ Bot task failed. Check logs for details.", logging.ERROR)
             
     except Exception as e:
-        bot_log_callback(f"Critical error: {str(e)}", logging.ERROR)
+        bot_log_callback(profile_name, f"Critical error: {str(e)}", logging.ERROR)
     finally:
-        bot_status['running'] = False
-        bot_status['current_task'] = None
-        socketio.emit('bot_finished', {'success': True})
+        active_bots[profile_name]['running'] = False
+        active_bots[profile_name]['current_task'] = None
+        socketio.emit('bot_finished', {'success': True, 'profile': profile_name}, room=profile_name)
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/login', methods=['POST'])
+def login_profile():
+    data = request.json
+    profile_name = data.get('profile_name')
+    
+    if not profile_name:
+        return jsonify({'error': 'Profile name is required'}), 400
+        
+    profiles = load_profiles()
+    if profile_name not in profiles:
+        return jsonify({'error': 'Profile not found'}), 404
+        
+    if profile_name in active_bots and active_bots[profile_name]['running']:
+        return jsonify({'error': f'Bot is already running for profile {profile_name}'}), 400
+
+    username = profiles[profile_name]['username']
+    password = profiles[profile_name]['password']
+    
+    active_bots[profile_name] = {
+        'running': True,
+        'current_task': 'Starting login setup...',
+    }
+    
+    thread = threading.Thread(
+        target=run_login_task, 
+        args=(profile_name, username, password)
+    )
+    thread.daemon = True
+    thread.start()
+    active_bots[profile_name]['thread'] = thread
+    
+    return jsonify({'message': f'Login setup started for {profile_name}'})
+
 @app.route('/run', methods=['POST'])
 def run_bot():
-    global bot_thread
-    
-    if bot_status['running']:
-        return jsonify({'error': 'Bot is already running'}), 400
-        
     data = request.json
     post_url = data.get('post_url')
     comment = data.get('comment')
     count = int(data.get('count', 1))
     headless = data.get('headless', False)
-    profile_name = data.get('profile_name', 'default')
+    profile_name = data.get('profile_name')
     
-    # Load profile details if exists
+    # Require a valid profile
     profiles = load_profiles()
-    if profile_name in profiles:
-        username = profiles[profile_name]['username']
-        password = profiles[profile_name]['password']
-        bot_log_callback(f"Using saved credentials for profile: {profile_name}", logging.INFO)
-    else:
-        username = data.get('username')
-        password = data.get('password')
+    if not profile_name or profile_name not in profiles:
+        return jsonify({'error': 'A valid profile is required to run the bot'}), 400
+        
+    if profile_name in active_bots and active_bots[profile_name]['running']:
+        return jsonify({'error': f'Bot is already running for profile {profile_name}'}), 400
+
+    username = profiles[profile_name]['username']
+    password = profiles[profile_name]['password']
+    bot_log_callback(profile_name, f"Using saved credentials for profile: {profile_name}", logging.INFO)
     
     if not post_url or not comment:
         return jsonify({'error': 'Missing required parameters'}), 400
         
-    bot_thread = threading.Thread(
+    active_bots[profile_name] = {
+        'running': True,
+        'current_task': 'Initializing...',
+    }
+
+    thread = threading.Thread(
         target=run_bot_task, 
         args=(post_url, comment, count, headless, profile_name, username, password)
     )
-    bot_thread.daemon = True
-    bot_thread.start()
+    thread.daemon = True
+    thread.start()
+    active_bots[profile_name]['thread'] = thread
     
     return jsonify({'message': 'Bot started successfully'})
 
 @app.route('/status')
-def get_status():
-    return jsonify(bot_status)
+@app.route('/status/<profile_name>')
+def get_status(profile_name=None):
+    if profile_name:
+        status = active_bots.get(profile_name, {'running': False, 'current_task': None})
+        # Don't return the Thread object
+        return jsonify({
+            'running': status.get('running', False),
+            'current_task': status.get('current_task')
+        })
+    
+    # Return brief status for all (for overall UI awareness if needed)
+    return jsonify({name: {'running': info['running'], 'task': info['current_task']} for name, info in active_bots.items()})
 
 if __name__ == '__main__':
     # Ensure templates and static directories exist
