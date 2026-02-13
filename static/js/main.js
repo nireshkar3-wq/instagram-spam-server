@@ -329,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
     monitorBotBtn.addEventListener('click', showScreenshotModal);
     closeModalBtn.addEventListener('click', hideScreenshotModal);
+    document.getElementById('close-modal-x').addEventListener('click', hideScreenshotModal);
 
     // Close modal on click outside
     screenshotModal.addEventListener('click', (e) => {
