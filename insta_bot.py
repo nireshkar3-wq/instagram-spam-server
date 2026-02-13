@@ -181,106 +181,104 @@ class InstagramCommentBot:
     def login(self):
         """Login to Instagram - Automated with manual fallback."""
         try:
-            self.log("🏠 Opening Instagram homepage...")
-            self.browser.get('https://www.instagram.com/') # Go to root first
-            sleep(8) # Increased for LXC
+            self.log("[STEP 1] 🌐 Navigating to Instagram root...")
+            self.browser.get('https://www.instagram.com/') 
+            sleep(10) # Enough for redirect and cookies
             
-            # Check if already logged in (maybe session was active)
-            if self.is_logged_in() == True:
-                self.log("✨ Session verified! Already logged in.")
+            # Check if already logged in
+            status = self.is_logged_in()
+            if status == True:
+                self.log("[STEP 2a] ✨ Session verified! Already logged in.")
                 return True
+            elif status == "SESSION_LOST":
+                self.log("[STEP 2b] ❌ Browser session lost. Aborting login.", logging.ERROR)
+                return False
+                
+            self.log("[STEP 3] 📍 Not logged in. Preparing for credentials entry...")
             
-            self.log("📍 Navigating to login page...")
-            self.browser.get('https://www.instagram.com/accounts/login/')
-            sleep(5) # Increased for LXC
+            # Only navigate if we aren't already on the login page
+            if 'accounts/login' not in self.browser.current_url:
+                self.log("📍 Redirecting to login page explicitly...")
+                self.browser.get('https://www.instagram.com/accounts/login/')
+                sleep(8)
+            else:
+                self.log("📍 Already on login page. Proceeding.")
             
             # 1. Try Automated Login
-            self.log(f"Attempting automated login for user: {self.username}")
+            self.log(f"[STEP 4] 🤖 Attempting automated login for: {self.username}")
             try:
-                # Handle possible Cookie Consent banner
+                # Handle Cookie Consent (often blocks elements on server environments)
+                self.log("🔍 [4.1] Checking for cookie consent banner...")
                 try:
                     cookie_selectors = [
-                        "//button[contains(text(), 'Allow all cookies')]",
-                        "//button[contains(text(), 'Allow Essential and Optional')]",
+                        "//button[text()='Allow all cookies']",
                         "//button[contains(text(), 'Allow all')]",
-                        "//button[contains(., 'Allow')]",
-                        "//div[contains(text(), 'Allow')]"
+                        "//button[contains(text(), 'Accept')]",
+                        "//div[contains(text(), 'Accept all')]"
                     ]
-                    cookie_btn = None
                     for selector in cookie_selectors:
                         try:
-                            cookie_btn = WebDriverWait(self.browser, 3).until(
+                            btn = WebDriverWait(self.browser, 2).until(
                                 EC.element_to_be_clickable((By.XPATH, selector))
                             )
-                            if cookie_btn: 
-                                cookie_btn.click()
-                                self.log(f"Dismissed cookie consent banner: {selector}")
-                                sleep(2)
-                                break
+                            btn.click()
+                            self.log(f"✅ Dismissed cookie banner: {selector}")
+                            sleep(2)
+                            break
                         except: continue
-                except:
-                    pass
+                except: pass
 
-                # Find username field using multiple possible selectors
-                user_selectors = [
-                    "username", 
-                    "//*[@name='username']", 
-                    "//input[@aria-label='Phone number, username, or email']",
-                    "//input[@type='text']",
-                    "//input[contains(@class, '_2hvTZ')]"
-                ]
+                # Find username field
+                self.log("🔍 [4.2] Searching for username field...")
+                user_selectors = ["username", "//*[@name='username']", "//input[@type='text']"]
                 user_field = None
-                self.log("🔍 Looking for username field...")
                 for selector in user_selectors:
                     try:
                         by = By.NAME if selector == "username" else By.XPATH
-                        user_field = WebDriverWait(self.browser, 5).until(
+                        user_field = WebDriverWait(self.browser, 3).until(
                             EC.presence_of_element_located((by, selector))
                         )
                         if user_field: 
-                            self.log(f"📍 Found username field using selector: {selector}")
+                            self.log(f"✅ Found username field via: {selector}")
                             break
                     except: continue
 
                 if not user_field:
-                    # Debug help: save a screenshot on failure to see what's actually on screen
-                    if self.headless:
-                        self.browser.save_screenshot(f"login_failure_{self.profile_name}.png")
-                        self.log(f"📸 Saved failure screenshot to login_failure_{self.profile_name}.png", logging.WARNING)
-                    raise Exception("Could not find username field with any known selectors. Page might be restricted or structure changed.")
+                    self.log("❌ [4.2] Could not find username field. Capturing failure screenshot...", logging.ERROR)
+                    self.browser.save_screenshot(f"login_failure_{self.profile_name}.png")
+                    raise Exception("Login fields missing from page load.")
 
                 # Find password field
-                self.log("🔍 Looking for password field...")
+                self.log("🔍 [4.3] Accessing password field...")
                 pass_field = WebDriverWait(self.browser, 5).until(
                     EC.presence_of_element_located((By.NAME, "password"))
                 )
                 
-                # Human-like typing
-                self.log(f"⌨️ Typing username: {self.username}")
+                # Type credentials
+                self.log(f"⌨️ [4.4] Typing credentials (slow mode enabled)...")
                 self.type_slowly(user_field, self.username)
                 sleep(1)
-                self.log("⌨️ Typing password...")
                 self.type_slowly(pass_field, self.password)
                 sleep(1)
                 
                 # Submit
-                self.log("🔍 Looking for 'Log in' button...")
+                self.log("🔍 [4.5] Looking for Log In button...")
                 submit_selectors = ["//button[@type='submit']", "//div[text()='Log in']", "//button[contains(., 'Log In')]"]
                 for selector in submit_selectors:
                     try:
-                        submit_btn = WebDriverWait(self.browser, 5).until(
+                        submit_btn = WebDriverWait(self.browser, 3).until(
                             EC.element_to_be_clickable((By.XPATH, selector))
                         )
-                        self.log(f"🚀 Clicking login button: {selector}")
+                        self.log(f"🚀 [4.6] Clicking Login via: {selector}")
                         submit_btn.click()
                         break
                     except:
-                        if selector == submit_selectors[-1]: # If last one failing, try Enter key
-                            self.log("⚠️ Button click failed, trying ENTER key fallback...")
+                        if selector == submit_selectors[-1]:
+                            self.log("⚠️ Button unreachable, forcing ENTER key...")
                             pass_field.send_keys(Keys.ENTER)
                 
-                self.log("🔓 Login form submitted. Waiting for page transition (12s)...")
-                sleep(12) # Increased wait for potential redirects/popups
+                self.log("🔓 [STEP 5] 📬 Form submitted. Waiting for main feed (15s)...")
+                sleep(15) 
                 
                 # Check for "Save Login Info"
                 try:
