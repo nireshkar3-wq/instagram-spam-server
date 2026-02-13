@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveProfileBtn = document.getElementById('save-profile-btn');
     const deleteProfileBtn = document.getElementById('delete-profile-btn');
     const setupLoginBtn = document.getElementById('setup-login-btn');
+    const exportSessionBtn = document.getElementById('export-session-btn');
+    const importSessionBtn = document.getElementById('import-session-btn');
+    const sessionUploadInput = document.getElementById('session-upload-input');
 
     let isRunning = false;
     let currentProfile = "";
@@ -139,6 +142,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function exportSession() {
+        const profile_name = profileSelect.value;
+        if (!profile_name) {
+            alert("Please select an account profile to export.");
+            return;
+        }
+        addLogEntry(`Exporting session for: ${profile_name}...`, "system", new Date().toLocaleTimeString());
+        window.location.href = `/export_session/${profile_name}`;
+    }
+
+    async function importSession(file) {
+        const profile_name = profileSelect.value;
+        if (!profile_name) {
+            alert("Please select an account profile to import into.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('profile_name', profile_name);
+
+        addLogEntry(`Uploading session ZIP for: ${profile_name}...`, "system", new Date().toLocaleTimeString());
+
+        try {
+            const resp = await fetch('/import_session', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await resp.json();
+            if (resp.ok) {
+                addLogEntry(`✅ SUCCESS: ${result.message}`, "system", new Date().toLocaleTimeString());
+            } else {
+                addLogEntry(`❌ Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
+            }
+        } catch (err) {
+            addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
+        }
+    }
+
     // --- Helper Functions ---
     function addLogEntry(message, level, timestamp) {
         const entry = document.createElement('div');
@@ -197,6 +240,16 @@ document.addEventListener('DOMContentLoaded', () => {
     saveProfileBtn.addEventListener('click', saveProfile);
     deleteProfileBtn.addEventListener('click', deleteProfile);
     setupLoginBtn.addEventListener('click', setupLogin);
+    exportSessionBtn.addEventListener('click', exportSession);
+    importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
+
+    sessionUploadInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            importSession(e.target.files[0]);
+            // Reset input so the same file can be uploaded again if needed
+            e.target.value = '';
+        }
+    });
 
     profileSelect.addEventListener('change', () => {
         const newProfile = profileSelect.value;

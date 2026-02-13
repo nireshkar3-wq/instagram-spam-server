@@ -9,7 +9,10 @@ import os
 import logging
 import json
 import shutil
-from insta_bot import InstagramCommentBot
+import zipfile
+import io
+from flask import Flask, render_template, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 
 PROFILES_FILE = 'profiles.json'
 
@@ -252,6 +255,61 @@ def get_status(profile_name=None):
     
     # Return brief status for all (for overall UI awareness if needed)
     return jsonify({name: {'running': info['running'], 'task': info['current_task']} for name, info in active_bots.items()})
+
+@app.route('/export_session/<profile_name>')
+def export_session(profile_name):
+    session_path = os.path.join('Instagram_session', profile_name)
+    if not os.path.exists(session_path):
+        return jsonify({'error': 'Session data not found for this profile'}), 404
+    
+    # Create zip in memory
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(session_path):
+            for file in files:
+                abs_path = os.path.join(root, file)
+                rel_path = os.path.relpath(abs_path, session_path)
+                zf.write(abs_path, rel_path)
+    
+    memory_file.seek(0)
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'insta_session_{profile_name}.zip'
+    )
+
+@app.route('/import_session', methods=['POST'])
+def import_session():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    profile_name = request.form.get('profile_name')
+    
+    if file.filename == '' or not profile_name:
+        return jsonify({'error': 'No file or profile name selected'}), 400
+    
+    if not file.filename.endswith('.zip'):
+        return jsonify({'error': 'Please upload a ZIP file'}), 400
+        
+    session_path = os.path.join('Instagram_session', profile_name)
+    
+    # Ensure base dir exists
+    os.makedirs('Instagram_session', exist_ok=True)
+    
+    # Delete existing if any
+    if os.path.exists(session_path):
+        shutil.rmtree(session_path)
+    
+    os.makedirs(session_path)
+    
+    try:
+        with zipfile.ZipFile(file, 'r') as zf:
+            zf.extractall(session_path)
+        return jsonify({'message': f'Session for {profile_name} imported successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Failed to extract session: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Ensure templates and static directories exist
