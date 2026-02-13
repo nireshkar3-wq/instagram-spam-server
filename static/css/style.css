@@ -124,7 +124,13 @@ body {
     width: 100%;
 }
 
-gap: 1rem;
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .header-actions {
