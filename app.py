@@ -259,6 +259,9 @@ def get_status(profile_name=None):
 
 @app.route('/export_session/<profile_name>')
 def export_session(profile_name):
+    if profile_name in active_bots and active_bots[profile_name]['running']:
+        return jsonify({'error': 'Cannot export session while the bot is running for this profile'}), 400
+
     session_path = os.path.join('Instagram_session', profile_name)
     if not os.path.exists(session_path):
         return jsonify({'error': 'Session data not found for this profile'}), 404
@@ -308,6 +311,18 @@ def import_session():
     try:
         with zipfile.ZipFile(file, 'r') as zf:
             zf.extractall(session_path)
+            
+        # --- Auto-Flatten Logic ---
+        # If the user zipped the folder itself, we might have niresh/niresh/Default
+        # We want everything in niresh/
+        items = os.listdir(session_path)
+        if len(items) == 1 and os.path.isdir(os.path.join(session_path, items[0])):
+            # It's a nested folder (e.g. they zipped the 'niresh' folder)
+            nested_path = os.path.join(session_path, items[0])
+            for item in os.listdir(nested_path):
+                shutil.move(os.path.join(nested_path, item), session_path)
+            os.rmdir(nested_path)
+            
         return jsonify({'message': f'Session for {profile_name} imported successfully'})
     except Exception as e:
         return jsonify({'error': f'Failed to extract session: {str(e)}'}), 500
