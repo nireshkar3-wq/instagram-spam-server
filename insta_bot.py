@@ -250,9 +250,23 @@ class InstagramCommentBot:
 
                 # Find password field
                 self.log("🔍 [4.3] Accessing password field...")
-                pass_field = WebDriverWait(self.browser, 5).until(
-                    EC.presence_of_element_located((By.NAME, "password"))
-                )
+                pass_selectors = ["password", "//input[@name='password']", "//input[@type='password']"]
+                pass_field = None
+                for selector in pass_selectors:
+                    try:
+                        by = By.NAME if selector == "password" else By.XPATH
+                        pass_field = WebDriverWait(self.browser, 3).until(
+                            EC.presence_of_element_located((by, selector))
+                        )
+                        if pass_field: 
+                            self.log(f"✅ Found password field via: {selector}")
+                            break
+                    except: continue
+
+                if not pass_field:
+                    self.log("❌ [4.3] Could not find password field. Capturing failure screenshot...", logging.ERROR)
+                    self.browser.save_screenshot(f"pass_failure_{self.profile_name}.png")
+                    raise Exception("Password field missing from page load.")
                 
                 # Type credentials
                 self.log(f"⌨️ [4.4] Typing credentials (slow mode enabled)...")
