@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addProfileForm = document.getElementById('add-profile-form');
     const saveProfileBtn = document.getElementById('save-profile-btn');
     const deleteProfileBtn = document.getElementById('delete-profile-btn');
-    const setupLoginBtn = document.getElementById('setup-login-btn');
     const exportSessionBtn = document.getElementById('export-session-btn');
     const importSessionBtn = document.getElementById('import-session-btn');
     const sessionUploadInput = document.getElementById('session-upload-input');
@@ -123,40 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function setupLogin() {
-        const profile_name = profileSelect.value;
-        if (!profile_name) {
-            alert("Please select an account profile to setup.");
-            return;
-        }
-        if (profile_name === 'default') {
-            alert("Please select a saved account to setup login.");
-            return;
-        }
-
-        if (isRunning) return;
-
-        setBotRunning(true);
-        addLogEntry(`Starting manual login setup for: ${profile_name}`, "system", new Date().toLocaleTimeString());
-        addLogEntry("A visible browser window will open. Please log in manually if needed.", "INFO", new Date().toLocaleTimeString());
-
-        try {
-            const resp = await fetch('/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profile_name })
-            });
-
-            const result = await resp.json();
-            if (!resp.ok) {
-                addLogEntry(`Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
-                setBotRunning(false);
-            }
-        } catch (err) {
-            addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
-            setBotRunning(false);
-        }
-    }
 
     async function exportSession() {
         const profile_name = profileSelect.value;
@@ -324,7 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveProfileBtn.addEventListener('click', saveProfile);
     deleteProfileBtn.addEventListener('click', deleteProfile);
-    setupLoginBtn.addEventListener('click', setupLogin);
     exportSessionBtn.addEventListener('click', exportSession);
     importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
     monitorBotBtn.addEventListener('click', showScreenshotModal);

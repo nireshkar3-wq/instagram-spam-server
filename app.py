@@ -106,41 +106,6 @@ def bot_log_callback(profile_name, message, level):
         'profile': profile_name
     }, room=profile_name)
 
-def run_login_task(profile_name, username, password):
-    active_bots[profile_name]['running'] = True
-    active_bots[profile_name]['current_task'] = f"Setting up session for {profile_name}"
-    
-    # On Linux/LXC, we MUST run headless because there is no display
-    import sys
-    is_linux = sys.platform.startswith('linux')
-    
-    try:
-        if is_linux:
-            bot_log_callback(profile_name, "🐧 Linux detected: Running login setup in HEADLESS mode (no window).", logging.INFO)
-        else:
-            bot_log_callback(profile_name, "⚠️ Note: Visible login is starting. Please log in manually if the browser opens.", logging.WARNING)
-            
-        bot = InstagramCommentBot(
-            headless=is_linux, # Force headless on Linux
-            log_callback=lambda msg, lvl: bot_log_callback(profile_name, msg, lvl),
-            profile_name=profile_name,
-            username=username,
-            password=password
-        )
-        active_bots[profile_name]['bot'] = bot
-        success = bot.login_standalone()
-        
-        if success:
-            bot_log_callback(profile_name, "✅ Login successful! Session saved.", logging.INFO)
-        else:
-            bot_log_callback(profile_name, "❌ Login failed.", logging.ERROR)
-            
-    except Exception as e:
-        bot_log_callback(profile_name, f"Login error: {str(e)}", logging.ERROR)
-    finally:
-        active_bots[profile_name]['running'] = False
-        active_bots[profile_name]['current_task'] = None
-        socketio.emit('bot_finished', {'success': True, 'profile': profile_name}, room=profile_name)
 
 def run_bot_task(post_url, comment, count, headless, profile_name, username, password):
     active_bots[profile_name]['running'] = True
@@ -171,38 +136,6 @@ def run_bot_task(post_url, comment, count, headless, profile_name, username, pas
 def index():
     return render_template('index.html')
 
-@app.route('/login', methods=['POST'])
-def login_profile():
-    data = request.json
-    profile_name = data.get('profile_name')
-    
-    if not profile_name:
-        return jsonify({'error': 'Profile name is required'}), 400
-        
-    profiles = load_profiles()
-    if profile_name not in profiles:
-        return jsonify({'error': 'Profile not found'}), 404
-        
-    if profile_name in active_bots and active_bots[profile_name]['running']:
-        return jsonify({'error': f'Bot is already running for profile {profile_name}'}), 400
-
-    username = profiles[profile_name]['username']
-    password = profiles[profile_name]['password']
-    
-    active_bots[profile_name] = {
-        'running': True,
-        'current_task': 'Starting login setup...',
-    }
-    
-    thread = threading.Thread(
-        target=run_login_task, 
-        args=(profile_name, username, password)
-    )
-    thread.daemon = True
-    thread.start()
-    active_bots[profile_name]['thread'] = thread
-    
-    return jsonify({'message': f'Login setup started for {profile_name}'})
 
 @app.route('/run', methods=['POST'])
 def run_bot():
