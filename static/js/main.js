@@ -9,6 +9,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusBadge = document.getElementById('bot-status-badge');
     const statusText = document.getElementById('status-text');
 
+    // Global Error Catcher
+    window.onerror = function (msg, url, line) {
+        const errorMsg = `JS Error: ${msg} (at ${url}:${line})`;
+        console.error(errorMsg);
+        if (typeof addLogEntry === 'function') {
+            addLogEntry(errorMsg, "ERROR", new Date().toLocaleTimeString());
+        }
+        return false;
+    };
+
     // Profile management elements
     const profileSelect = document.getElementById('profile_select');
     const toggleAddBtn = document.getElementById('toggle-add-profile');
