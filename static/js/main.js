@@ -208,13 +208,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         modalProfileName.textContent = currentProfile;
-        screenshotModal.classList.remove('hidden');
-        console.log("Screenshot modal should be visible now.");
+        screenshotModal.classList.add('active'); // Use .active instead of removing .hidden
+        console.log("Screenshot modal .active added.");
         startScreenshotPolling();
     }
 
     function hideScreenshotModal() {
-        screenshotModal.classList.add('hidden');
+        screenshotModal.classList.remove('active');
         stopScreenshotPolling();
     }
 
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function updateScreenshot() {
-        if (!currentProfile || screenshotModal.classList.contains('hidden')) return;
+        if (!currentProfile || !screenshotModal.classList.contains('active')) return;
 
         screenshotLoader.classList.remove('hidden');
         try {
@@ -243,9 +243,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const tempImg = new Image();
             tempImg.onload = () => {
                 botScreenshot.src = imgUrl;
+                botScreenshot.classList.remove('hidden');
+                document.getElementById('bot-offline-msg').classList.add('hidden');
                 screenshotLoader.classList.add('hidden');
             };
             tempImg.onerror = () => {
+                // If the image fails to load, it's likely a 404 because the bot is offline
+                botScreenshot.classList.add('hidden');
+                document.getElementById('bot-offline-msg').classList.remove('hidden');
                 screenshotLoader.classList.add('hidden');
             };
             tempImg.src = imgUrl;

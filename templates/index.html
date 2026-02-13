@@ -231,11 +231,20 @@
                 <button id="close-modal-btn" class="icon-btn">✕</button>
             </div>
             <div class="screenshot-container">
+                <div id="screenshot-loader" class="screenshot-loader hidden">
+                    <div class="loader-spinner"></div>
+                    <p>Fetching Screen...</p>
+                </div>
+                <div id="bot-offline-msg" class="offline-placeholder hidden">
+                    <span>🔌</span>
+                    <h4>Bot is Offline</h4>
+                    <p>Start a task to see the live browser view.</p>
+                </div>
                 <img id="bot-screenshot" src="" alt="Bot Screen">
-                <div id="screenshot-loader" class="btn-loader"></div>
             </div>
             <div class="modal-footer">
-                <p>Refreshing every 3 seconds while active.</p>
+                <p class="hint">Live view updates every 3 seconds while bot is active.</p>
+                <button id="close-modal-btn" class="secondary-btn">Close View</button>
             </div>
         </div>
     </div>
