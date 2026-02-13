@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const post_url = document.getElementById('post_url').value;
         const comment = document.getElementById('comment').value;
         const count = document.getElementById('count').value;
-        const headless = document.getElementById('headless').checked;
+        const headless = true;
         const profile_name = profileSelect.value;
 
         if (!profile_name) {
