@@ -107,6 +107,7 @@ def run_login_task(profile_name, username, password):
     active_bots[profile_name]['current_task'] = f"Setting up session for {profile_name}"
     
     try:
+        bot_log_callback(profile_name, "⚠️ Note: Visible login is starting. On a remote server, this will run in the background unless you have a display setup.", logging.WARNING)
         bot = InstagramCommentBot(
             headless=False, # Must be visible for initial setup
             log_callback=lambda msg, lvl: bot_log_callback(profile_name, msg, lvl),
