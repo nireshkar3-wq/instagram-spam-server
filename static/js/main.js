@@ -25,9 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addProfileForm = document.getElementById('add-profile-form');
     const saveProfileBtn = document.getElementById('save-profile-btn');
     const deleteProfileBtn = document.getElementById('delete-profile-btn');
-    const exportSessionBtn = document.getElementById('export-session-btn');
-    const importSessionBtn = document.getElementById('import-session-btn');
-    const sessionUploadInput = document.getElementById('session-upload-input');
     const monitorBotBtn = document.getElementById('monitor-bot-btn');
     const screenshotModal = document.getElementById('screenshot-modal');
     const botScreenshot = document.getElementById('bot-screenshot');
@@ -122,46 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    async function exportSession() {
-        const profile_name = profileSelect.value;
-        if (!profile_name) {
-            alert("Please select an account profile to export.");
-            return;
-        }
-        addLogEntry(`Exporting session for: ${profile_name}...`, "system", new Date().toLocaleTimeString());
-        window.location.href = `/export_session/${profile_name}`;
-    }
-
-    async function importSession(file) {
-        const profile_name = profileSelect.value;
-        if (!profile_name) {
-            alert("Please select an account profile to import into.");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('profile_name', profile_name);
-
-        addLogEntry(`Uploading session ZIP for: ${profile_name}...`, "system", new Date().toLocaleTimeString());
-
-        try {
-            const resp = await fetch('/import_session', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await resp.json();
-            if (resp.ok) {
-                addLogEntry(`✅ SUCCESS: ${result.message}`, "system", new Date().toLocaleTimeString());
-            } else {
-                addLogEntry(`❌ Error: ${result.error}`, "ERROR", new Date().toLocaleTimeString());
-            }
-        } catch (err) {
-            addLogEntry(`Network Error: ${err.message}`, "ERROR", new Date().toLocaleTimeString());
-        }
-    }
 
     // --- Monitoring Logic ---
     let screenshotInterval = null;
@@ -289,24 +246,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveProfileBtn.addEventListener('click', saveProfile);
     deleteProfileBtn.addEventListener('click', deleteProfile);
-    exportSessionBtn.addEventListener('click', exportSession);
-    importSessionBtn.addEventListener('click', () => sessionUploadInput.click());
-    monitorBotBtn.addEventListener('click', showScreenshotModal);
-    closeModalBtn.addEventListener('click', hideScreenshotModal);
-    document.getElementById('close-modal-x').addEventListener('click', hideScreenshotModal);
-
-    // Close modal on click outside
-    screenshotModal.addEventListener('click', (e) => {
-        if (e.target === screenshotModal) hideScreenshotModal();
-    });
-
-    sessionUploadInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            importSession(e.target.files[0]);
-            // Reset input so the same file can be uploaded again if needed
-            e.target.value = '';
-        }
-    });
 
     profileSelect.addEventListener('change', () => {
         const newProfile = profileSelect.value;
@@ -324,6 +263,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // Immediately check status for the new profile
             checkStatus();
         }
+    });
+
+    monitorBotBtn.addEventListener('click', showScreenshotModal);
+    closeModalBtn.addEventListener('click', hideScreenshotModal);
+    document.getElementById('close-modal-x').addEventListener('click', hideScreenshotModal);
+
+    // Close modal on click outside
+    screenshotModal.addEventListener('click', (e) => {
+        if (e.target === screenshotModal) hideScreenshotModal();
     });
 
     botForm.addEventListener('submit', async (e) => {
