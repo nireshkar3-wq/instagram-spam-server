@@ -74,6 +74,7 @@ class InstagramCommentBot:
         # Linux container compatibility (Mandatory for LXC/Docker)
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--remote-debugging-port=9222')
         
         # Anti-detection measures
         options.add_argument('--disable-blink-features=AutomationControlled')

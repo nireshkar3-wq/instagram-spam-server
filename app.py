@@ -2,7 +2,7 @@ import eventlet
 eventlet.monkey_patch()
 
 from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import threading
 import time
 import os
@@ -106,10 +106,18 @@ def run_login_task(profile_name, username, password):
     active_bots[profile_name]['running'] = True
     active_bots[profile_name]['current_task'] = f"Setting up session for {profile_name}"
     
+    # On Linux/LXC, we MUST run headless because there is no display
+    import sys
+    is_linux = sys.platform.startswith('linux')
+    
     try:
-        bot_log_callback(profile_name, "⚠️ Note: Visible login is starting. On a remote server, this will run in the background unless you have a display setup.", logging.WARNING)
+        if is_linux:
+            bot_log_callback(profile_name, "🐧 Linux detected: Running login setup in HEADLESS mode (no window).", logging.INFO)
+        else:
+            bot_log_callback(profile_name, "⚠️ Note: Visible login is starting. Please log in manually if the browser opens.", logging.WARNING)
+            
         bot = InstagramCommentBot(
-            headless=False, # Must be visible for initial setup
+            headless=is_linux, # Force headless on Linux
             log_callback=lambda msg, lvl: bot_log_callback(profile_name, msg, lvl),
             profile_name=profile_name,
             username=username,
