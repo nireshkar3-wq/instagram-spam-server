@@ -13,6 +13,7 @@ import zipfile
 import io
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
+from insta_bot import InstagramCommentBot
 
 PROFILES_FILE = 'profiles.json'
 
