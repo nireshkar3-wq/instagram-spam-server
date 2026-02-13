@@ -202,9 +202,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let screenshotInterval = null;
 
     function showScreenshotModal() {
-        if (!currentProfile) return;
+        console.log("showScreenshotModal clicked. currentProfile:", currentProfile);
+        if (!currentProfile) {
+            alert("Please select an account profile first to use Live View.");
+            return;
+        }
         modalProfileName.textContent = currentProfile;
         screenshotModal.classList.remove('hidden');
+        console.log("Screenshot modal should be visible now.");
         startScreenshotPolling();
     }
 
