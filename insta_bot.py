@@ -183,15 +183,16 @@ class InstagramCommentBot:
         try:
             self.log("🏠 Opening Instagram homepage...")
             self.browser.get('https://www.instagram.com/') # Go to root first
-            sleep(5)
+            sleep(8) # Increased for LXC
             
             # Check if already logged in (maybe session was active)
             if self.is_logged_in() == True:
                 self.log("✨ Session verified! Already logged in.")
                 return True
             
+            self.log("📍 Navigating to login page...")
             self.browser.get('https://www.instagram.com/accounts/login/')
-            sleep(3)
+            sleep(5) # Increased for LXC
             
             # 1. Try Automated Login
             self.log(f"Attempting automated login for user: {self.username}")
@@ -229,13 +230,16 @@ class InstagramCommentBot:
                     "//input[contains(@class, '_2hvTZ')]"
                 ]
                 user_field = None
+                self.log("🔍 Looking for username field...")
                 for selector in user_selectors:
                     try:
                         by = By.NAME if selector == "username" else By.XPATH
-                        user_field = WebDriverWait(self.browser, 3).until(
+                        user_field = WebDriverWait(self.browser, 5).until(
                             EC.presence_of_element_located((by, selector))
                         )
-                        if user_field: break
+                        if user_field: 
+                            self.log(f"📍 Found username field using selector: {selector}")
+                            break
                     except: continue
 
                 if not user_field:
@@ -243,32 +247,39 @@ class InstagramCommentBot:
                     if self.headless:
                         self.browser.save_screenshot(f"login_failure_{self.profile_name}.png")
                         self.log(f"📸 Saved failure screenshot to login_failure_{self.profile_name}.png", logging.WARNING)
-                    raise Exception("Could not find username field with any known selectors")
+                    raise Exception("Could not find username field with any known selectors. Page might be restricted or structure changed.")
 
                 # Find password field
-                pass_field = self.browser.find_element(By.NAME, "password")
+                self.log("🔍 Looking for password field...")
+                pass_field = WebDriverWait(self.browser, 5).until(
+                    EC.presence_of_element_located((By.NAME, "password"))
+                )
                 
                 # Human-like typing
-                self.log(f"Entering username: {self.username}")
+                self.log(f"⌨️ Typing username: {self.username}")
                 self.type_slowly(user_field, self.username)
                 sleep(1)
-                self.log("Entering password...")
+                self.log("⌨️ Typing password...")
                 self.type_slowly(pass_field, self.password)
                 sleep(1)
                 
                 # Submit
-                self.log("Looking for 'Log in' button...")
+                self.log("🔍 Looking for 'Log in' button...")
                 submit_selectors = ["//button[@type='submit']", "//div[text()='Log in']", "//button[contains(., 'Log In')]"]
                 for selector in submit_selectors:
                     try:
-                        submit_btn = self.browser.find_element(By.XPATH, selector)
+                        submit_btn = WebDriverWait(self.browser, 5).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                        self.log(f"🚀 Clicking login button: {selector}")
                         submit_btn.click()
                         break
                     except:
                         if selector == submit_selectors[-1]: # If last one failing, try Enter key
+                            self.log("⚠️ Button click failed, trying ENTER key fallback...")
                             pass_field.send_keys(Keys.ENTER)
                 
-                self.log("🔓 Login form submitted. Waiting to see if we're in...")
+                self.log("🔓 Login form submitted. Waiting for page transition (12s)...")
                 sleep(12) # Increased wait for potential redirects/popups
                 
                 # Check for "Save Login Info"

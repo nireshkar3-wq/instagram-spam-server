@@ -313,15 +313,16 @@ def import_session():
             zf.extractall(session_path)
             
         # --- Auto-Flatten Logic ---
-        # If the user zipped the folder itself, we might have niresh/niresh/Default
+        # If the user zipped the profile folder (e.g. 'niresh'), we might have niresh/niresh/Default
         # We want everything in niresh/
-        items = os.listdir(session_path)
+        items = [i for i in os.listdir(session_path) if i != '__MACOSX'] # Ignore mac junk
         if len(items) == 1 and os.path.isdir(os.path.join(session_path, items[0])):
             # It's a nested folder (e.g. they zipped the 'niresh' folder)
             nested_path = os.path.join(session_path, items[0])
             for item in os.listdir(nested_path):
                 shutil.move(os.path.join(nested_path, item), session_path)
             os.rmdir(nested_path)
+            logging.info(f"Flattened nested folder for profile {profile_name}")
             
         return jsonify({'message': f'Session for {profile_name} imported successfully'})
     except Exception as e:
