@@ -31,6 +31,14 @@
                 <span class="status-dot"></span>
                 <span id="status-text">Ready</span>
             </div>
+            <button id="monitor-bot-btn" class="icon-btn secondary pulse-btn hidden" title="Monitor Bot Screen">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <span>Live View</span>
+            </button>
         </header>
 
         <section class="main-layout">
@@ -212,6 +220,23 @@
             </div>
         </section>
     </main>
+
+    <!-- Screenshot Modal -->
+    <div id="screenshot-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Bot Live View - <span id="modal-profile-name"></span></h3>
+                <button id="close-modal-btn" class="icon-btn">✕</button>
+            </div>
+            <div class="screenshot-container">
+                <img id="bot-screenshot" src="" alt="Bot Screen">
+                <div id="screenshot-loader" class="btn-loader"></div>
+            </div>
+            <div class="modal-footer">
+                <p>Refreshing every 3 seconds while active.</p>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

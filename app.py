@@ -127,6 +127,7 @@ def run_login_task(profile_name, username, password):
             username=username,
             password=password
         )
+        active_bots[profile_name]['bot'] = bot
         success = bot.login_standalone()
         
         if success:
@@ -143,8 +144,6 @@ def run_login_task(profile_name, username, password):
 
 def run_bot_task(post_url, comment, count, headless, profile_name, username, password):
     active_bots[profile_name]['running'] = True
-    active_bots[profile_name]['current_task'] = f"Posting to {post_url} via {profile_name}"
-    
     try:
         bot = InstagramCommentBot(
             headless=headless, 
@@ -153,6 +152,7 @@ def run_bot_task(post_url, comment, count, headless, profile_name, username, pas
             username=username,
             password=password
         )
+        active_bots[profile_name]['bot'] = bot
         success = bot.run(post_url, comment, count)
         
         if success:
@@ -326,6 +326,21 @@ def import_session():
         return jsonify({'message': f'Session for {profile_name} imported successfully'})
     except Exception as e:
         return jsonify({'error': f'Failed to extract session: {str(e)}'}), 500
+
+@app.route('/screenshot/<profile_name>')
+def get_screenshot(profile_name):
+    if profile_name not in active_bots or not active_bots[profile_name].get('bot'):
+        return jsonify({'error': 'Bot not active for this profile'}), 404
+        
+    bot = active_bots[profile_name]['bot']
+    screenshot_data = bot.get_screenshot_as_png()
+    if not screenshot_data:
+        return jsonify({'error': 'Could not capture screenshot'}), 500
+        
+    return send_file(
+        io.BytesIO(screenshot_data),
+        mimetype='image/png'
+    )
 
 if __name__ == '__main__':
     # Ensure templates and static directories exist

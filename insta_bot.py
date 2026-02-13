@@ -168,12 +168,21 @@ class InstagramCommentBot:
                 return "SESSION_LOST"
             self.log(f"Error checking login status: {e}", logging.ERROR)
             return False
+
+    def get_screenshot_as_png(self):
+        """Capture current browser screen as PNG bytes."""
+        try:
+            if self.browser:
+                return self.browser.get_screenshot_as_png()
+        except:
+            pass
+        return None
     
     def login(self):
         """Login to Instagram - Automated with manual fallback."""
         try:
             self.log("🏠 Opening Instagram homepage...")
-            self.browser.get('https://www.instagram.com/accounts/login/')
+            self.browser.get('https://www.instagram.com/') # Go to root first
             sleep(5)
             
             # Check if already logged in (maybe session was active)
@@ -181,17 +190,33 @@ class InstagramCommentBot:
                 self.log("✨ Session verified! Already logged in.")
                 return True
             
+            self.browser.get('https://www.instagram.com/accounts/login/')
+            sleep(3)
+            
             # 1. Try Automated Login
             self.log(f"Attempting automated login for user: {self.username}")
             try:
                 # Handle possible Cookie Consent banner
                 try:
-                    cookie_btn = WebDriverWait(self.browser, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Allow all cookies') or contains(text(), 'Allow Essential and Optional')]"))
-                    )
-                    cookie_btn.click()
-                    self.log("Dismissed cookie consent banner")
-                    sleep(2)
+                    cookie_selectors = [
+                        "//button[contains(text(), 'Allow all cookies')]",
+                        "//button[contains(text(), 'Allow Essential and Optional')]",
+                        "//button[contains(text(), 'Allow all')]",
+                        "//button[contains(., 'Allow')]",
+                        "//div[contains(text(), 'Allow')]"
+                    ]
+                    cookie_btn = None
+                    for selector in cookie_selectors:
+                        try:
+                            cookie_btn = WebDriverWait(self.browser, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, selector))
+                            )
+                            if cookie_btn: 
+                                cookie_btn.click()
+                                self.log(f"Dismissed cookie consent banner: {selector}")
+                                sleep(2)
+                                break
+                        except: continue
                 except:
                     pass
 
